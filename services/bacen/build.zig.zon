@@ -1,0 +1,12 @@
+.{
+    .name = .bacen,
+    .fingerprint = 0x5e5be5920d74c6ec,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{
+        .monolith = .{
+            .path = "../../libs/monolith",
+        },
+    },
+    .paths = .{""},
+}

@@ -1,0 +1,44 @@
+global:
+  scrape_interval: 15s
+  scrape_timeout: 10s
+
+scrape_configs:
+  - job_name: spi
+    static_configs:
+      - targets: ["localhost:18080"]
+    metrics_path: /metrics
+
+  - job_name: dict
+    static_configs:
+      - targets: ["localhost:18081"]
+    metrics_path: /metrics
+
+  - job_name: str
+    static_configs:
+      - targets: ["localhost:18082"]
+    metrics_path: /metrics
+
+  - job_name: bacen
+    static_configs:
+      - targets: ["localhost:18083"]
+    metrics_path: /metrics
+
+  - job_name: auth
+    static_configs:
+      - targets: ["localhost:18084"]
+    metrics_path: /metrics
+
+  - job_name: psp-alpha
+    static_configs:
+      - targets: ["localhost:19080"]
+    metrics_path: /metrics
+
+  - job_name: psp-beta
+    static_configs:
+      - targets: ["localhost:19090"]
+    metrics_path: /metrics
+
+  - job_name: nats
+    static_configs:
+      - targets: ["localhost:18222"]
+    metrics_path: /varz

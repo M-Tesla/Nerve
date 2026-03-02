@@ -1,0 +1,301 @@
+networks:
+  nerve-rsfn:
+    driver: bridge
+    internal: true
+    ipam:
+      config:
+        - subnet: 10.0.1.0/24
+
+  nerve-public:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 10.0.2.0/24
+
+volumes:
+  spi-data: {}
+  dict-data: {}
+  str-data: {}
+  bacen-data: {}
+  auth-data: {}
+  nats-data: {}
+  vm-data: {}
+  grafana-data: {}
+
+services:
+
+  # ────────────────────────────────────────────
+  # API Gateway — HAProxy
+  # ────────────────────────────────────────────
+  haproxy:
+    image: haproxy:2.9-alpine
+    container_name: nerve-haproxy
+    networks:
+      - nerve-public
+      - nerve-rsfn
+    ports:
+      - "443:443"
+      - "8404:8404"  # Stats
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+      - ./tls:/tls:ro
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────
+  # Messaging — NATS JetStream
+  # ────────────────────────────────────────────
+  nats:
+    image: nats:2.10-alpine
+    container_name: nerve-nats
+    networks:
+      - nerve-rsfn
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - nats-data:/data/nats
+    command: ["-c", "/etc/nats/nats.conf"]
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────
+  # Auth Service — Ed25519 JWT (Zig)
+  # ────────────────────────────────────────────
+  auth:
+    build:
+      context: ../../services/auth
+      dockerfile: Dockerfile
+    container_name: nerve-auth
+    networks:
+      - nerve-rsfn
+    environment:
+      - AUTH_PORT=8084
+      - DB_PATH=/data/auth.monolith
+      - TOKEN_TTL_SECONDS=900
+      # PSP public keys são carregados via seed na inicialização
+    volumes:
+      - auth-data:/data
+      - ./tls:/tls:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8084/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ────────────────────────────────────────────
+  # DICT — Registro de Chaves PIX (Zig)
+  # ────────────────────────────────────────────
+  dict:
+    build:
+      context: ../../services/dict
+      dockerfile: Dockerfile
+    container_name: nerve-dict
+    networks:
+      - nerve-rsfn
+    environment:
+      - DICT_PORT=8081
+      - DB_PATH=/data/dict.monolith
+      - DICT_CACHE_SIZE=10000
+      - AUTH_URL=http://auth:8084
+    volumes:
+      - dict-data:/data
+      - ./tls:/tls:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ────────────────────────────────────────────
+  # STR — Sistema de Transferência de Reservas (Zig)
+  # ────────────────────────────────────────────
+  str:
+    build:
+      context: ../../services/str
+      dockerfile: Dockerfile
+    container_name: nerve-str
+    networks:
+      - nerve-rsfn
+    environment:
+      - STR_PORT=8082
+      - DB_PATH=/data/str.monolith
+      - AUTH_URL=http://auth:8084
+    volumes:
+      - str-data:/data
+      - ./tls:/tls:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ────────────────────────────────────────────
+  # SPI — Sistema de Pagamentos Instantâneos (Zig)
+  # ────────────────────────────────────────────
+  spi:
+    build:
+      context: ../../services/spi
+      dockerfile: Dockerfile
+    container_name: nerve-spi
+    networks:
+      - nerve-rsfn
+    environment:
+      - SPI_PORT=8080
+      - DB_PATH=/data/spi.monolith
+      - DICT_URL=http://dict:8081
+      - STR_URL=http://str:8082
+      - AUTH_URL=http://auth:8084
+      - NATS_URL=nats://nats:4222
+      - PSP_BETA_TIMEOUT_MS=5000
+    volumes:
+      - spi-data:/data
+      - ./tls:/tls:ro
+    depends_on:
+      dict:
+        condition: service_healthy
+      str:
+        condition: service_healthy
+      nats:
+        condition: service_started
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ────────────────────────────────────────────
+  # BACEN — Supervisor (Zig)
+  # ────────────────────────────────────────────
+  bacen:
+    build:
+      context: ../../services/bacen
+      dockerfile: Dockerfile
+    container_name: nerve-bacen
+    networks:
+      - nerve-rsfn
+    environment:
+      - BACEN_PORT=8083
+      - DB_PATH=/data/bacen.monolith
+      - NATS_URL=nats://nats:4222
+      - SLA_P99_THRESHOLD_MS=10000
+    volumes:
+      - bacen-data:/data
+    depends_on:
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────
+  # PSP-beta — Banco Recebedor (Go)
+  # ────────────────────────────────────────────
+  psp-beta:
+    build:
+      context: ../../services/psp-beta
+      dockerfile: Dockerfile
+    container_name: nerve-psp-beta
+    networks:
+      - nerve-rsfn
+    environment:
+      - PSP_BETA_PORT=9090
+      - AUTH_URL=http://auth:8084
+      - PSP_ID=psp-beta
+      - INITIAL_BALANCE_CENTAVOS=0
+    depends_on:
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ────────────────────────────────────────────
+  # PSP-alpha — Banco Pagador (Go)
+  # ────────────────────────────────────────────
+  psp-alpha:
+    build:
+      context: ../../services/psp-alpha
+      dockerfile: Dockerfile
+    container_name: nerve-psp-alpha
+    networks:
+      - nerve-public
+      - nerve-rsfn
+    ports:
+      - "9080:9080"
+    environment:
+      - PSP_ALPHA_PORT=9080
+      - SPI_URL=http://spi:8080
+      - DICT_URL=http://dict:8081
+      - AUTH_URL=http://auth:8084
+      - PSP_ID=psp-alpha
+      - TLS_CERT=/tls/psp-alpha/cert.pem
+      - TLS_KEY=/tls/psp-alpha/key.pem
+      - TLS_CA=/tls/ca/cert.pem
+      - INITIAL_BALANCE_CENTAVOS=10000000
+    volumes:
+      - ./tls:/tls:ro
+    depends_on:
+      spi:
+        condition: service_healthy
+      psp-beta:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────
+  # Observabilidade — VictoriaMetrics
+  # ────────────────────────────────────────────
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:latest
+    container_name: nerve-victoriametrics
+    networks:
+      - nerve-rsfn
+    volumes:
+      - vm-data:/victoria-metrics-data
+      - ./victoriametrics/scrape.yaml:/etc/vm/scrape.yaml:ro
+    command:
+      - "--promscrape.config=/etc/vm/scrape.yaml"
+      - "--storageDataPath=/victoria-metrics-data"
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────
+  # Observabilidade — Vector (log aggregation)
+  # ────────────────────────────────────────────
+  vector:
+    image: timberio/vector:latest-alpine
+    container_name: nerve-vector
+    networks:
+      - nerve-rsfn
+    volumes:
+      - ./vector/vector.toml:/etc/vector/vector.toml:ro
+      - /var/run/podman/podman.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+
+  # ────────────────────────────────────────────
+  # Observabilidade — Grafana
+  # ────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: nerve-grafana
+    networks:
+      - nerve-public
+      - nerve-rsfn
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=nerve123
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources.yaml:/etc/grafana/provisioning/datasources/ds.yaml:ro
+    depends_on:
+      - victoriametrics
+    restart: unless-stopped

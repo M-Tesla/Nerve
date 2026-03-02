@@ -1,0 +1,106 @@
+{
+  "title": "Nerve PIX",
+  "uid": "nerve-pix",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-30m", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Transações PIX — Total",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }] } } },
+      "targets": [{ "expr": "nerve_pix_transactions_total", "legendFormat": "PIX total", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }]
+    },
+    {
+      "id": 2,
+      "title": "Settled pelo BACEN",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }] } } },
+      "targets": [{ "expr": "nerve_bacen_settled_total", "legendFormat": "Settled", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }]
+    },
+    {
+      "id": 3,
+      "title": "PSP-alpha Pagamentos",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "blue" }] } } },
+      "targets": [{ "expr": "nerve_psp_alpha_payments_total", "legendFormat": "PSP-α total", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }]
+    },
+    {
+      "id": 4,
+      "title": "PSP-alpha Settled",
+      "type": "stat",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "options": { "colorMode": "background", "graphMode": "area", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": { "defaults": { "color": { "mode": "thresholds" }, "thresholds": { "steps": [{ "value": 0, "color": "green" }] } } },
+      "targets": [{ "expr": "nerve_psp_alpha_payments_settled_total", "legendFormat": "PSP-α settled", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }]
+    },
+    {
+      "id": 5,
+      "title": "Taxa de Transações PIX (tx/s)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2 },
+          "unit": "reqps",
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        { "expr": "rate(nerve_pix_transactions_total[1m])", "legendFormat": "SPI tx/s", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } },
+        { "expr": "rate(nerve_bacen_settled_total[1m])", "legendFormat": "BACEN settled/s", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } },
+        { "expr": "rate(nerve_psp_alpha_payments_total[1m])", "legendFormat": "PSP-α payments/s", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "PSP-beta Créditos Recebidos",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "lineWidth": 2 },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        { "expr": "nerve_psp_beta_credits_total", "legendFormat": "PSP-β créditos", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } },
+        { "expr": "nerve_psp_beta_accounts_total", "legendFormat": "PSP-β contas", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Status dos Serviços",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 4 },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "orientation": "horizontal",
+        "textMode": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [{ "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } }],
+          "thresholds": { "steps": [{ "value": 0, "color": "red" }, { "value": 1, "color": "green" }] },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "targets": [
+        { "expr": "nerve_spi_up", "legendFormat": "SPI", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } },
+        { "expr": "nerve_bacen_up", "legendFormat": "BACEN", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } },
+        { "expr": "up{job=\"psp-alpha\"}", "legendFormat": "PSP-alpha", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } },
+        { "expr": "up{job=\"psp-beta\"}", "legendFormat": "PSP-beta", "datasource": { "type": "prometheus", "uid": "P4169E866C3094E38" } }
+      ]
+    }
+  ]
+}

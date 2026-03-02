@@ -1,0 +1,12 @@
+.{
+    .name = .auth,
+    .fingerprint = 0xf8deb059cea5b814,
+    .version = "0.1.0",
+    .minimum_zig_version = "0.14.0",
+    .dependencies = .{
+        .monolith = .{
+            .path = "../../libs/monolith",
+        },
+    },
+    .paths = .{""},
+}
